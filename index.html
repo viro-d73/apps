@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mantra">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<title>Mantra</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #111113; color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%; }
+  body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  button { font-family: inherit; color: inherit; }
+  .serif { font-family: ui-serif, "New York", "Iowan Old Style", Georgia, serif; }
+  .hidden { display: none !important; }
+
+  /* Phone frame on a computer, full screen on a phone */
+  .phone { position: relative; width: 390px; height: 844px; border-radius: 52px; overflow: hidden; background: #000;
+    box-shadow: 0 0 0 10px #1d1d1f, 0 0 0 12px #3a3a3c, 0 30px 80px rgba(0,0,0,.6); transform-origin: center;
+    --top: 47px; --bottom: 34px; --tabh: calc(49px + var(--bottom));
+    --qscale: 1; --qcolor: #fff; --qshadow: 0 2px 6px rgba(0,0,0,.35);
+    --qshade: linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.45)); }
+  .island { position: absolute; top: 11px; left: 50%; width: 122px; height: 35px; margin-left: -61px;
+    background: #000; border-radius: 20px; z-index: 90; pointer-events: none; }
+  @media (max-width: 600px) {
+    body { display: block; background: #000; }
+    .phone { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; box-shadow: none; transform: none !important;
+      --top: env(safe-area-inset-top, 20px); --bottom: env(safe-area-inset-bottom, 0px); }
+    .island { display: none; }
+  }
+
+  .screen { position: absolute; top: 0; left: 0; right: 0; bottom: var(--tabh); overflow-y: auto;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .screen::-webkit-scrollbar { display: none; }
+
+  /* Feed */
+  #feed { scroll-snap-type: y mandatory; }
+  .page { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; }
+  .fill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .shade { position: absolute; inset: 0; background: var(--qshade); }
+  .qwrap { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; padding: 0 36px; text-align: center; color: var(--qcolor); text-shadow: var(--qshadow); }
+  .qtext { margin: 0; font-weight: 500; line-height: 1.3; white-space: pre-line; }
+  .qauthor { margin: 0; font-style: italic; font-size: calc(16px * var(--qscale)); opacity: .85; }
+  .pblur { position: absolute; top: -40px; left: -40px; width: calc(100% + 80px); height: calc(100% + 80px); object-fit: cover; filter: blur(30px); }
+  .pdim { position: absolute; inset: 0; background: rgba(0,0,0,.35); }
+  .pfit { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+  .actions { position: absolute; right: 18px; bottom: 28px; display: flex; flex-direction: column; gap: 14px; }
+  .round { width: 48px; height: 48px; border: 0; border-radius: 24px; background: rgba(0,0,0,.25);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  .shuffle { position: absolute; top: calc(var(--top) + 8px); right: 18px; width: 44px; height: 44px; border: 0; border-radius: 22px;
+    background: rgba(255,255,255,.2); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 5; }
+  .empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 0 40px; }
+  .install { position: absolute; top: calc(var(--top) + 60px); left: 14px; right: 14px; z-index: 6; display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px 14px 14px 16px; border-radius: 18px; background: rgba(28,28,30,.92); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    font-size: 14px; line-height: 19px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+  .install b { display: block; font-size: 15px; margin-bottom: 2px; }
+  .install button { flex: none; border: 0; background: transparent; color: #8E8E93; font-size: 22px; line-height: 1; padding: 0 2px; cursor: pointer; }
+
+  /* Lists */
+  .navbtns { display: flex; justify-content: flex-end; gap: 6px; padding: calc(var(--top) + 4px) 10px 0; }
+  .icon-btn { width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+  h1 { margin: 0 16px 10px; font-size: 34px; line-height: 41px; font-weight: 700; }
+  .search { margin: 0 16px 12px; height: 36px; border-radius: 10px; background: #1C1C1E; display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+  .search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: #fff; font-size: 17px; font-family: inherit; }
+  .search input::placeholder { color: #8E8E93; }
+  .seg { margin: 0 16px 16px; padding: 2px; border-radius: 9px; background: #1C1C1E; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; }
+  .seg button { height: 30px; border: 0; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; }
+  .seg button.on { background: #636366; }
+  .group { margin: 0 16px; border-radius: 12px; background: #1C1C1E; overflow: hidden; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 0 16px; font-size: 17px; }
+  .sep { border-top: .5px solid #38383A; }
+  .qrow { cursor: pointer; display: flex; align-items: center; gap: 14px; padding: 10px 6px 10px 14px; border-bottom: .5px solid #38383A; }
+  .qrow:last-child { border-bottom: 0; }
+  .thumb { position: relative; flex: none; width: 54px; height: 54px; border-radius: 10px; overflow: hidden; }
+  .qrow .t { margin: 0; font-size: 16px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .qrow .s { margin: 3px 0 0; font-size: 12px; color: #8E8E93; }
+  .foot { margin: 8px 32px 0; font-size: 13px; line-height: 18px; color: #8E8E93; }
+  .head { margin: 28px 32px 7px; font-size: 13px; color: #8E8E93; text-transform: uppercase; }
+  .switch { position: relative; flex: none; width: 51px; height: 31px; border-radius: 16px; border: 0; padding: 0; cursor: pointer; background: #39393D; transition: background .2s; }
+  .switch span { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.3); transition: left .2s; }
+  .switch.on { background: #34C759; }
+  .switch.on span { left: 22px; }
+  .stepper { display: flex; flex: none; border-radius: 8px; background: #2C2C2E; overflow: hidden; }
+  .stepper button { width: 47px; height: 32px; border: 0; background: transparent; font-size: 22px; cursor: pointer; }
+  .stepper button + button { border-left: 1px solid #48484A; }
+  .time { display: flex; align-items: center; gap: 8px; }
+  .time button { width: 32px; height: 32px; border: 0; border-radius: 16px; background: #2C2C2E; font-size: 18px; cursor: pointer; }
+  .time span { min-width: 64px; text-align: center; padding: 6px 10px; border-radius: 8px; background: #2C2C2E; font-variant-numeric: tabular-nums; }
+  .link { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 16px; border: 0; background: transparent;
+    color: #0A84FF !important; font-size: 17px; text-align: left; cursor: pointer; }
+  .link.danger { color: #FF453A !important; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 14px; }
+  .swatches button { height: 96px; border-radius: 12px; cursor: pointer; padding: 0 0 6px; display: flex; align-items: flex-end; justify-content: center;
+    font-size: 11px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.5); border: 3px solid transparent; background-size: cover; background-position: center; }
+  .swatches button.on { border-color: #fff; }
+  .tcolors { display: flex; gap: 12px; padding: 4px 16px 14px; overflow-x: auto; scrollbar-width: none; }
+  .tcolors button { flex: none; width: 42px; height: 42px; border-radius: 50%; padding: 4px; border: 3px solid transparent; background: transparent; cursor: pointer; }
+  .tcolors button.on { border-color: #0A84FF; }
+  .tcolors span { display: block; width: 100%; height: 100%; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+  input[type=range] { flex: 1; accent-color: #0A84FF; }
+  input[type=color] { width: 36px; height: 36px; border: 0; padding: 0; background: transparent; cursor: pointer; }
+  .times { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 14px; }
+  .times span { padding: 5px 9px; border-radius: 8px; background: #2C2C2E; font-size: 14px; font-variant-numeric: tabular-nums; }
+
+  /* Tab bar */
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: var(--tabh); padding-bottom: var(--bottom); background: rgba(22,22,24,.94);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-top: .5px solid #38383A; display: grid; grid-template-columns: repeat(3, 1fr); z-index: 10; }
+  .tabbar button { border: 0; background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding-top: 7px; font-size: 10px; font-weight: 500; color: #8E8E93; }
+  .tabbar button.on { color: #0A84FF; }
+  .tabbar svg { stroke: currentColor; }
+
+  /* Sheets & toast */
+  .sheetwrap { position: absolute; inset: 0; z-index: 70; background: rgba(0,0,0,0); pointer-events: none; transition: background .3s; }
+  .sheetwrap.show { background: rgba(0,0,0,.5); pointer-events: auto; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; top: calc(var(--top) + 10px); background: #1C1C1E; border-radius: 14px 14px 0 0;
+    transform: translateY(105%); transition: transform .35s cubic-bezier(.2,.9,.3,1); overflow-y: auto; padding-bottom: calc(var(--bottom) + 20px); }
+  .sheetwrap.show .sheet { transform: none; }
+  .sheetbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; height: 56px; padding: 0 16px; font-size: 17px; background: #1C1C1E; }
+  .sheetbar button { border: 0; background: transparent; color: #0A84FF; font-size: 17px; cursor: pointer; padding: 10px 0; min-width: 60px; }
+  .sheetbar button:last-child { text-align: right; font-weight: 600; }
+  .sheetbar button:disabled { color: #5A5A5E; cursor: default; }
+  .field { margin: 0 16px; border-radius: 12px; background: #2C2C2E; padding: 12px 16px; }
+  .field textarea, .field input { width: 100%; border: 0; outline: none; background: transparent; color: #fff; font-size: 17px; resize: none; font-family: inherit; }
+  .field textarea { min-height: 120px; line-height: 1.4; }
+  .field ::placeholder { color: #8E8E93; }
+  .delbtn { display: block; width: calc(100% - 32px); margin: 28px 16px; height: 48px; border: 0; border-radius: 12px; background: #2C2C2E; color: #FF453A !important; font-size: 17px; cursor: pointer; }
+  .steps { margin: 4px 16px 0; padding: 0; list-style: none; counter-reset: s; }
+  .steps li { counter-increment: s; position: relative; padding: 12px 0 12px 40px; border-bottom: .5px solid #38383A; font-size: 16px; line-height: 22px; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 12px; width: 26px; height: 26px; border-radius: 13px; background: #0A84FF;
+    font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .steps b { font-weight: 600; }
+  .bigbtn { display: block; width: calc(100% - 32px); margin: 16px; height: 50px; border: 0; border-radius: 12px; background: #0A84FF; color: #fff; font-size: 17px; font-weight: 600; cursor: pointer; }
+  .toast { position: absolute; left: 24px; right: 24px; bottom: calc(var(--tabh) + 20px); padding: 12px 16px; border-radius: 14px; background: rgba(44,44,46,.96);
+    font-size: 14px; line-height: 19px; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.4); z-index: 80; opacity: 0; transform: translateY(8px);
+    transition: opacity .25s, transform .25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="island"></div>
+
+  <div class="screen" id="feed"></div>
+  <button class="shuffle" id="shuffleBtn" aria-label="Shuffle quotes">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22"/><path d="m18 2 4 4-4 4"/><path d="M2 6h1.9c1.5 0 2.9.9 3.6 2.2"/><path d="M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8"/><path d="m18 14 4 4-4 4"/></svg>
+  </button>
+  <div class="install hidden" id="installHint">
+    <div><b>Install Mantra</b>Tap the Share button in Safari, then <b style="display:inline">Add to Home Screen</b>. Add your quotes after installing: the home-screen app keeps its own copy.</div>
+    <button id="installClose" aria-label="Dismiss">×</button>
+  </div>
+
+  <div class="screen hidden" id="quotes">
+    <div class="navbtns">
+      <button class="icon-btn" id="addPhotosBtn" aria-label="Add photo quotes">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/><path d="M16 5h6"/><path d="M19 2v6"/></svg>
+      </button>
+      <button class="icon-btn" id="addBtn" aria-label="Add quote">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </button>
+    </div>
+    <h1>Quotes</h1>
+    <label class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8E8E93" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="searchInput" type="search" placeholder="Search quotes" aria-label="Search quotes">
+    </label>
+    <div class="seg" id="seg"></div>
+    <div class="group" id="rows"></div>
+    <p class="foot" id="rowFoot" style="margin-bottom:32px"></p>
+  </div>
+
+  <div class="screen hidden" id="settings"></div>
+
+  <nav class="tabbar">
+    <button data-tab="feed" class="on">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+      <span>Feed</span>
+    </button>
+    <button data-tab="quotes">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M17 6H3"/><path d="M21 12H8"/><path d="M21 18H8"/><path d="M3 12v6"/></svg>
+      <span>Quotes</span>
+    </button>
+    <button data-tab="settings">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10"/><path d="M18 6h2"/><circle cx="16" cy="6" r="2"/><path d="M4 12h4"/><path d="M12 12h8"/><circle cx="10" cy="12" r="2"/><path d="M4 18h10"/><path d="M18 18h2"/><circle cx="16" cy="18" r="2"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- Edit sheet -->
+  <div class="sheetwrap" id="editWrap">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="edTitle">
+      <div class="sheetbar">
+        <button id="edCancel">Cancel</button>
+        <strong id="edTitle">Edit Quote</strong>
+        <button id="edSave">Save</button>
+      </div>
+      <div id="edPhoto" style="margin:0 16px 4px"></div>
+      <p class="head" id="edTextHead" style="margin-top:18px">Quote or mantra</p>
+      <div class="field"><textarea id="edText" class="serif" placeholder="Type a quote or mantra…" aria-labelledby="edTextHead"></textarea></div>
+      <p class="head" id="edAuthorHead">Author (optional)</p>
+      <div class="field"><input id="edAuthor" placeholder="Leave empty if there's no author" aria-labelledby="edAuthorHead" autocapitalize="words"></div>
+      <p class="foot">Without an author, only the quote is shown.</p>
+      <button class="delbtn" id="edDelete">Delete Quote</button>
+    </div>
+  </div>
+
+  <!-- Info sheet (setup steps, share fallback) -->
+  <div class="sheetwrap" id="infoWrap">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+      <div class="sheetbar">
+        <span style="min-width:60px"></span>
+        <strong id="infoTitle"></strong>
+        <button id="infoDone">Done</button>
+      </div>
+      <div id="infoBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <input type="file" id="photoFile" accept="image/*" multiple class="hidden">
+  <input type="file" id="bgFile" accept="image/*" class="hidden">
+  <input type="file" id="importFile" accept="application/json,.json" class="hidden">
+</div>
+
+<script>
+'use strict';
+
+/* ================= Data ================= */
+var PRESETS = [
+  { name: 'Dusk', a: '#5C388C', b: '#ED7D66' }, { name: 'Ocean', a: '#0D295A', b: '#1A8C9E' },
+  { name: 'Forest', a: '#123326', b: '#59855C' }, { name: 'Dawn', a: '#FAB58F', b: '#D66687' },
+  { name: 'Night', a: '#0A0D24', b: '#333866' }, { name: 'Sand', a: '#C2A380', b: '#735C4A' },
+  { name: 'Lavender', a: '#9E8CD1', b: '#5C6BB3' }, { name: 'Charcoal', a: '#1A1A1C', b: '#474749' }
+];
+var TEXT_COLORS = [['White', '#FFFFFF'], ['Cream', '#F5EBDD'], ['Gold', '#E8C77A'], ['Blush', '#F4B6C2'],
+  ['Mint', '#BDE5CF'], ['Sky', '#B9D7F2'], ['Charcoal', '#2B2B2E'], ['Black', '#000000']];
+var STARTERS = [
+  ['Waste no more time arguing about what a good man should be. Be one.', 'Marcus Aurelius'],
+  ['Very little is needed to make a happy life; it is all within yourself, in your way of thinking.', 'Marcus Aurelius'],
+  ['Dwell on the beauty of life. Watch the stars, and see yourself running with them.', 'Marcus Aurelius'],
+  ['We suffer more often in imagination than in reality.', 'Seneca'],
+  ['While we are postponing, life speeds by.', 'Seneca'],
+  ['Begin at once to live, and count each separate day as a separate life.', 'Seneca'],
+  ['First say to yourself what you would be; and then do what you have to do.', 'Epictetus'],
+  ['No man is free who is not master of himself.', 'Epictetus'],
+  ['Wealth consists not in having great possessions, but in having few wants.', 'Epictetus'],
+  ['A journey of a thousand miles begins with a single step.', 'Lao Tzu'],
+  ['Knowing others is intelligence; knowing yourself is true wisdom.', 'Lao Tzu'],
+  ['Nature does not hurry, yet everything is accomplished.', 'Lao Tzu'],
+  ['Adopt the pace of nature: her secret is patience.', 'Ralph Waldo Emerson'],
+  ['Write it on your heart that every day is the best day in the year.', 'Ralph Waldo Emerson'],
+  ['The best way out is always through.', 'Robert Frost'],
+  ['Well done is better than well said.', 'Benjamin Franklin'],
+  ['Do what you can, with what you have, where you are.', 'Theodore Roosevelt'],
+  ['Act as if what you do makes a difference. It does.', 'William James'],
+  ['Rule your mind or it will rule you.', 'Horace'],
+  ['He who has a why to live can bear almost any how.', 'Friedrich Nietzsche'],
+  ['Fall seven times, stand up eight.', 'Japanese proverb'],
+  ['The best time to plant a tree was 20 years ago. The second best time is now.', 'Chinese proverb'],
+  ['I am exactly where I need to be.', ''], ['Breathe in calm. Breathe out tension.', ''],
+  ['Progress, not perfection.', ''], ['One thing at a time.', ''], ['I choose peace over worry.', ''],
+  ['This moment is enough.', ''], ['I am allowed to rest.', ''], ['Small steps, every day.', ''],
+  ['I can do hard things.', ''], ['Let it be easy.', ''], ['Slow down. Look up. Breathe.', ''],
+  ['I trust the timing of my life.', ''], ['Drink some water. Relax your shoulders. Unclench your jaw.', ''],
+  ['What I focus on grows.', ''], ['I give myself the kindness I give others.', ''],
+  ['Today I will notice something beautiful.', '']
+];
+
+var LS_Q = 'mantra.quotes.v1', LS_S = 'mantra.settings.v1';
+var DEFAULTS = { perDay: 10, start: 8, end: 22, favOnly: false, preset: 0, vary: false, useCustomBg: false,
+  textScale: 1, textColor: '#FFFFFF', installHintDismissed: false, times: null };
+
+function loadJSON(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function starterQuotes() { return STARTERS.map(function (s, i) { return { id: uid() + i, text: s[0], author: s[1], fav: false, created: i }; }); }
+
+var S = Object.assign({}, DEFAULTS, loadJSON(LS_S) || {});
+var Q = loadJSON(LS_Q);
+if (!Array.isArray(Q)) Q = starterQuotes();
+if (!Array.isArray(S.times) || !S.times.length) S.times = genTimes(S.perDay, S.start, S.end);
+var UI = { tab: 'feed', filter: 'All', search: '', order: [] };
+var IMG = {}; // image key -> object URL
+
+function saveQ() { try { localStorage.setItem(LS_Q, JSON.stringify(Q)); } catch (e) { toast('Could not save. Is your iPhone storage full?'); } }
+function saveS() { try { localStorage.setItem(LS_S, JSON.stringify(S)); } catch (e) {} }
+saveQ(); saveS();
+
+/* ================= Photo storage (IndexedDB) ================= */
+var dbPromise = null;
+function db() {
+  if (!dbPromise) dbPromise = new Promise(function (res, rej) {
+    var r = indexedDB.open('mantra', 1);
+    r.onupgradeneeded = function () { r.result.createObjectStore('images'); };
+    r.onsuccess = function () { res(r.result); };
+    r.onerror = function () { rej(r.error); };
+  });
+  return dbPromise;
+}
+function idb(mode, fn) {
+  return db().then(function (d) {
+    return new Promise(function (res, rej) {
+      var tx = d.transaction('images', mode), req = fn(tx.objectStore('images'));
+      tx.oncomplete = function () { res(req ? req.result : undefined); };
+      tx.onerror = function () { rej(tx.error); };
+      tx.onabort = function () { rej(tx.error); };
+    });
+  });
+}
+function setUrl(key, blob) { if (IMG[key]) URL.revokeObjectURL(IMG[key]); IMG[key] = URL.createObjectURL(blob); }
+function putImg(key, blob) { return idb('readwrite', function (st) { return st.put(blob, key); }).then(function () { setUrl(key, blob); }); }
+function getImg(key) { return idb('readonly', function (st) { return st.get(key); }); }
+function delImg(key) {
+  if (IMG[key]) { URL.revokeObjectURL(IMG[key]); delete IMG[key]; }
+  return idb('readwrite', function (st) { return st.delete(key); }).catch(function () {});
+}
+function loadAllImages() {
+  var keys = Q.filter(function (q) { return q.img; }).map(function (q) { return q.img; }).concat(['wallpaper']);
+  return Promise.all(keys.map(function (k) {
+    return getImg(k).then(function (b) { if (b) setUrl(k, b); }).catch(function () {});
+  }));
+}
+function downscale(file, max) {
+  return new Promise(function (res, rej) {
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function () {
+      var s = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+      var c = document.createElement('canvas');
+      c.width = Math.round(im.naturalWidth * s); c.height = Math.round(im.naturalHeight * s);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(function (b) { b ? res(b) : rej(new Error('encode')); }, 'image/jpeg', 0.85);
+    };
+    im.onerror = function () { URL.revokeObjectURL(url); rej(new Error('load')); };
+    im.src = url;
+  });
+}
+
+/* ================= Helpers ================= */
+function $(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function pad(n) { return (n < 10 ? '0' : '') + n; }
+function byId(id) { for (var i = 0; i < Q.length; i++) if (Q[i].id === id) return Q[i]; return null; }
+function grad(p) { return 'linear-gradient(135deg,' + p.a + ' 0%,' + p.b + ' 100%)'; }
+function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); }
+function presetFor(q) { return S.vary ? PRESETS[hash(q.id) % PRESETS.length] : PRESETS[S.preset] || PRESETS[0]; }
+function textSize(t) { var n = t.length; return n < 50 ? 34 : n < 110 ? 28 : n < 200 ? 24 : 20; }
+function genTimes(perDay, start, end) {
+  var slot = (end - start) * 60 / perDay, out = [];
+  for (var i = 0; i < perDay; i++) {
+    var m = Math.round(start * 60 + slot * i + slot * (0.1 + Math.random() * 0.8));
+    out.push(pad(Math.floor(m / 60) % 24) + ':' + pad(m % 60));
+  }
+  return out;
+}
+function isDark(hex) {
+  var v = parseInt(String(hex).slice(1), 16);
+  return (0.2126 * ((v >> 16) & 255) + 0.7152 * ((v >> 8) & 255) + 0.0722 * (v & 255)) / 255 < 0.5;
+}
+function useWallpaper() { return S.useCustomBg && IMG.wallpaper; }
+function bgHtml(q) {
+  return useWallpaper() ? '<img class="fill" src="' + IMG.wallpaper + '" alt="">'
+                        : '<div class="fill" style="background:' + grad(presetFor(q)) + '"></div>';
+}
+var HEART = 'M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z';
+function heartSvg(fav, size, off) {
+  var c = fav ? '#FF375F' : off;
+  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="' + (fav ? c : 'none') + '" stroke="' + c + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + HEART + '"/></svg>';
+}
+var toastTimer;
+function toast(text) {
+  $('toast').textContent = text; $('toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { $('toast').classList.remove('show'); }, 2800);
+}
+
+/* ================= Text style ================= */
+function applyTextStyle() {
+  var p = $('phone'), dark = isDark(S.textColor);
+  p.style.setProperty('--qscale', S.textScale);
+  p.style.setProperty('--qcolor', S.textColor);
+  p.style.setProperty('--qshadow', dark ? '0 2px 6px rgba(255,255,255,.3)' : '0 2px 6px rgba(0,0,0,.35)');
+  p.style.setProperty('--qshade', dark ? 'linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.35))'
+                                       : 'linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.45))');
+}
+
+/* ================= Feed ================= */
+function syncOrder() {
+  var ids = Q.map(function (q) { return q.id; }), all = {};
+  ids.forEach(function (id) { all[id] = true; });
+  UI.order = UI.order.filter(function (id) { return all[id]; });
+  var known = {}; UI.order.forEach(function (id) { known[id] = true; });
+  ids.forEach(function (id) { if (!known[id]) UI.order.splice(Math.floor(Math.random() * (UI.order.length + 1)), 0, id); });
+}
+function renderFeed() {
+  var keep = $('feed').scrollTop;
+  if (!Q.length) {
+    $('feed').innerHTML = '<section class="page"><div class="fill" style="background:' + grad(PRESETS[S.preset] || PRESETS[0]) + '"></div>' +
+      '<div class="empty"><strong style="font-size:22px">No quotes yet</strong><span style="opacity:.85">Add some in the Quotes tab.</span></div></section>';
+    return;
+  }
+  $('feed').innerHTML = UI.order.map(function (id) {
+    var q = byId(id); if (!q) return '';
+    var inner;
+    if (q.img) {
+      var u = IMG[q.img] || '';
+      inner = '<img class="pblur" src="' + u + '" alt=""><div class="pdim"></div><img class="pfit" src="' + u + '" alt="' + esc(q.text || 'Photo quote') + '">';
+    } else {
+      inner = bgHtml(q) + '<div class="shade"></div><div class="qwrap">' +
+        '<p class="qtext serif" style="font-size:calc(' + textSize(q.text) + 'px * var(--qscale))">' + esc(q.text) + '</p>' +
+        (q.author ? '<p class="qauthor serif">' + esc(q.author) + '</p>' : '') + '</div>';
+    }
+    return '<section class="page">' + inner +
+      '<div class="actions">' +
+      '<button class="round edit" data-id="' + id + '" aria-label="Edit quote"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>' +
+      '<button class="round fav" data-id="' + id + '" aria-label="Favorite" aria-pressed="' + !!q.fav + '">' + heartSvg(q.fav, 26, '#fff') + '</button>' +
+      '<button class="round share" data-id="' + id + '" aria-label="Share or save as wallpaper"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></button>' +
+      '</div></section>';
+  }).join('');
+  $('feed').scrollTop = keep;
+}
+$('feed').addEventListener('click', function (e) {
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.classList.contains('edit')) openEditor(b.dataset.id);
+  if (b.classList.contains('fav')) toggleFav(b.dataset.id);
+  if (b.classList.contains('share')) shareQuote(byId(b.dataset.id));
+});
+$('shuffleBtn').onclick = function () { UI.order = shuffle(UI.order); renderFeed(); $('feed').scrollTop = 0; };
+
+function toggleFav(id) {
+  var q = byId(id); if (!q) return;
+  q.fav = !q.fav; saveQ();
+  document.querySelectorAll('.fav[data-id="' + id + '"]').forEach(function (b) { b.innerHTML = heartSvg(q.fav, 26, '#fff'); b.setAttribute('aria-pressed', q.fav); });
+  renderRows();
+}
+
+/* ================= Quotes list ================= */
+function renderSeg() {
+  $('seg').innerHTML = ['All', 'Text', 'Photos', 'Favorites'].map(function (f) {
+    return '<button class="' + (UI.filter === f ? 'on' : '') + '" data-f="' + f + '" aria-pressed="' + (UI.filter === f) + '">' + f + '</button>';
+  }).join('');
+}
+$('seg').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { UI.filter = b.dataset.f; renderSeg(); renderRows(); } });
+function renderRows() {
+  var term = UI.search.trim().toLowerCase();
+  var list = Q.filter(function (q) {
+    if (UI.filter === 'Text' && q.img) return false;
+    if (UI.filter === 'Photos' && !q.img) return false;
+    if (UI.filter === 'Favorites' && !q.fav) return false;
+    if (term && (q.text || '').toLowerCase().indexOf(term) < 0 && (q.author || '').toLowerCase().indexOf(term) < 0) return false;
+    return true;
+  }).slice().sort(function (a, b) { return (b.created || 0) - (a.created || 0); });
+  $('rows').innerHTML = list.map(function (q) {
+    var thumb = q.img ? '<img class="fill" src="' + (IMG[q.img] || '') + '" alt="">' : bgHtml(q);
+    var title = q.text || (q.img ? 'Photo quote' : '');
+    return '<div class="qrow" data-id="' + q.id + '"><div class="thumb">' + thumb + '</div>' +
+      '<div style="flex:1;min-width:0"><p class="t serif">' + esc(title) + '</p>' + (q.author ? '<p class="s">' + esc(q.author) + '</p>' : '') + '</div>' +
+      '<button class="icon-btn rfav" data-id="' + q.id + '" aria-label="Favorite" aria-pressed="' + !!q.fav + '">' + heartSvg(q.fav, 18, '#8E8E93') + '</button></div>';
+  }).join('') || '<div class="row" style="color:#8E8E93">No quotes found</div>';
+  $('rowFoot').textContent = list.length + ' quotes · tap a quote to edit it';
+}
+$('rows').addEventListener('click', function (e) {
+  var b = e.target.closest('.rfav'); if (b) { toggleFav(b.dataset.id); return; }
+  var r = e.target.closest('.qrow'); if (r) openEditor(r.dataset.id);
+});
+$('searchInput').addEventListener('input', function (e) { UI.search = e.target.value; renderRows(); });
+$('addBtn').onclick = function () { openEditor(null); };
+$('addPhotosBtn').onclick = function () { $('photoFile').click(); };
+$('photoFile').addEventListener('change', function (e) {
+  var files = Array.prototype.slice.call(e.target.files || []);
+  e.target.value = '';
+  if (!files.length) return;
+  toast('Importing ' + files.length + (files.length === 1 ? ' photo…' : ' photos…'));
+  var added = 0, base = Date.now();
+  files.reduce(function (p, f, i) {
+    return p.then(function () {
+      return downscale(f, 1600).then(function (blob) {
+        var key = 'img-' + uid();
+        return putImg(key, blob).then(function () {
+          var id = uid();
+          Q.push({ id: id, text: '', author: '', img: key, fav: false, created: base + i });
+          added++;
+        });
+      }).catch(function () {});
+    });
+  }, Promise.resolve()).then(function () {
+    saveQ(); syncOrder(); refresh();
+    toast(added ? 'Added ' + added + (added === 1 ? ' photo quote.' : ' photo quotes.') : 'Those photos could not be read.');
+  });
+});
+
+/* ================= Editor ================= */
+var editingId = null;
+function openEditor(id) {
+  editingId = id;
+  var q = id ? byId(id) : null, isPhoto = !!(q && q.img);
+  $('edTitle').textContent = q ? 'Edit Quote' : 'New Quote';
+  $('edText').value = q ? q.text : '';
+  $('edAuthor').value = q && q.author ? q.author : '';
+  $('edDelete').classList.toggle('hidden', !q);
+  $('edPhoto').innerHTML = isPhoto ? '<img src="' + (IMG[q.img] || '') + '" alt="" style="display:block;width:100%;max-height:260px;object-fit:contain;border-radius:12px;background:#000">' : '';
+  $('edTextHead').textContent = isPhoto ? 'Caption (optional)' : 'Quote or mantra';
+  $('edText').placeholder = isPhoto ? 'Optional text, used for search and reminders' : 'Type a quote or mantra…';
+  updateSave();
+  $('editWrap').classList.add('show');
+}
+function closeEditor() { $('editWrap').classList.remove('show'); if (document.activeElement) document.activeElement.blur(); }
+function updateSave() { var q = editingId ? byId(editingId) : null; $('edSave').disabled = !(q && q.img) && !$('edText').value.trim(); }
+$('edText').addEventListener('input', updateSave);
+$('edCancel').onclick = closeEditor;
+$('editWrap').addEventListener('click', function (e) { if (e.target === $('editWrap')) closeEditor(); });
+$('edSave').onclick = function () {
+  var text = $('edText').value.trim(), author = $('edAuthor').value.trim(), wasEdit = !!editingId;
+  if (wasEdit) { var q = byId(editingId); q.text = text; q.author = author; }
+  else { Q.push({ id: uid(), text: text, author: author, fav: false, created: Date.now() }); }
+  saveQ(); syncOrder(); refresh(); closeEditor();
+  toast(wasEdit ? 'Saved.' : 'Added.');
+};
+$('edDelete').onclick = function () {
+  var q = byId(editingId); if (!q) return;
+  if (q.img) delImg(q.img);
+  Q.splice(Q.indexOf(q), 1);
+  saveQ(); syncOrder(); refresh(); closeEditor(); toast('Quote deleted.');
+};
+
+/* ================= Info sheet ================= */
+function openInfo(title, html) { $('infoTitle').textContent = title; $('infoBody').innerHTML = html; $('infoWrap').classList.add('show'); $('infoWrap').querySelector('.sheet').scrollTop = 0; }
+function closeInfo() { $('infoWrap').classList.remove('show'); }
+$('infoDone').onclick = closeInfo;
+$('infoWrap').addEventListener('click', function (e) { if (e.target === $('infoWrap')) closeInfo(); });
+
+/* ================= Share / save as wallpaper ================= */
+var pendingFile = null;
+function shareFile(file, fallbackHtml) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file] }).catch(function (err) {
+      if (err && err.name === 'AbortError') return;
+      pendingFile = file; openInfo('Ready', fallbackHtml);
+    });
+  } else {
+    pendingFile = file; openInfo('Ready', fallbackHtml);
+  }
+}
+function fallbackFor(url, isImage) {
+  return (isImage ? '<img src="' + url + '" alt="" style="display:block;width:calc(100% - 32px);margin:8px 16px;border-radius:12px">' +
+    '<p class="foot">Press and hold the image to save it to Photos, or tap the button.</p>' : '<p class="foot">Your file is ready.</p>') +
+    '<button class="bigbtn" id="shareAgain">Share</button>';
+}
+document.addEventListener('click', function (e) {
+  if (e.target && e.target.id === 'shareAgain' && pendingFile) {
+    var f = pendingFile;
+    if (navigator.canShare && navigator.canShare({ files: [f] })) navigator.share({ files: [f] }).catch(function () {});
+    else { var a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); }
+  }
+});
+function shareQuote(q) {
+  if (!q) return;
+  if (q.img) {
+    getImg(q.img).then(function (b) {
+      if (!b) return;
+      var f = new File([b], 'mantra-photo.jpg', { type: 'image/jpeg' });
+      shareFile(f, fallbackFor(IMG[q.img], true));
+    });
+    return;
+  }
+  drawQuote(q).then(function (blob) {
+    var f = new File([blob], 'mantra-quote.jpg', { type: 'image/jpeg' });
+    shareFile(f, fallbackFor(URL.createObjectURL(blob), true));
+  });
+}
+function wrapLines(ctx, text, maxW) {
+  var out = [];
+  String(text).split('\n').forEach(function (para) {
+    var words = para.split(/\s+/), line = '';
+    words.forEach(function (w) {
+      var test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width > maxW && line) { out.push(line); line = w; } else line = test;
+    });
+    out.push(line);
+  });
+  return out;
+}
+function drawQuote(q) {
+  return new Promise(function (res) {
+    var W = 1170, H = 2532, c = document.createElement('canvas'); c.width = W; c.height = H;
+    var x = c.getContext('2d'), dark = isDark(S.textColor), family = 'ui-serif, "New York", Georgia, serif';
+    function gradientBg() { var p = presetFor(q), g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, p.a); g.addColorStop(1, p.b); x.fillStyle = g; x.fillRect(0, 0, W, H); }
+    function text() {
+      var g = x.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, dark ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.10)');
+      g.addColorStop(1, dark ? 'rgba(255,255,255,.35)' : 'rgba(0,0,0,.45)');
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      var size = Math.round(textSize(q.text) * S.textScale * 3), aSize = Math.round(16 * S.textScale * 3), lh = size * 1.3;
+      x.font = '500 ' + size + 'px ' + family; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = S.textColor;
+      x.shadowColor = dark ? 'rgba(255,255,255,.3)' : 'rgba(0,0,0,.35)'; x.shadowBlur = 18; x.shadowOffsetY = 6;
+      var lines = wrapLines(x, q.text, W - 216), gap = 66;
+      var total = lines.length * lh + (q.author ? gap + aSize : 0), y = H / 2 - total / 2 + lh / 2;
+      lines.forEach(function (l) { x.fillText(l, W / 2, y); y += lh; });
+      if (q.author) { x.font = 'italic ' + aSize + 'px ' + family; x.globalAlpha = 0.85; x.fillText(q.author, W / 2, y - lh / 2 + gap + aSize / 2); x.globalAlpha = 1; }
+      c.toBlob(res, 'image/jpeg', 0.92);
+    }
+    if (useWallpaper()) {
+      var im = new Image();
+      im.onload = function () {
+        var s = Math.max(W / im.naturalWidth, H / im.naturalHeight), w = im.naturalWidth * s, h = im.naturalHeight * s;
+        x.drawImage(im, (W - w) / 2, (H - h) / 2, w, h); text();
+      };
+      im.onerror = function () { gradientBg(); text(); };
+      im.src = IMG.wallpaper;
+    } else { gradientBg(); text(); }
+  });
+}
+
+/* ================= Settings ================= */
+function sw(key, label, extra) {
+  return '<div class="row' + (extra || '') + '"><span>' + label + '</span><button class="switch' + (S[key] ? ' on' : '') + '" data-sw="' + key + '" role="switch" aria-checked="' + !!S[key] + '" aria-label="' + label + '"><span></span></button></div>';
+}
+function quoteLinesForShortcuts() {
+  var pool = Q.filter(function (q) { return q.text && q.text.trim(); });
+  if (S.favOnly) { var f = pool.filter(function (q) { return q.fav; }); if (f.length) pool = f; }
+  return pool.map(function (q) {
+    var t = q.text.replace(/\s*\n\s*/g, ' ').trim();
+    return q.author ? t + ' · ' + q.author : t;
+  });
+}
+function renderSettings() {
+  var keep = $('settings').scrollTop;
+  var sample = 'We suffer more often in imagination than in reality.';
+  var photos = Q.filter(function (q) { return q.img; }).length;
+  var lines = quoteLinesForShortcuts().length;
+  $('settings').innerHTML =
+    '<h1 style="padding-top:calc(var(--top) + 48px);margin-bottom:18px">Settings</h1>' +
+
+    '<p class="head" style="margin-top:0">Reminders</p><div class="group">' +
+      '<div class="row" style="min-height:52px"><span>Quotes per day <span style="color:#8E8E93;margin-left:6px">' + S.perDay + '</span></span>' +
+        '<div class="stepper"><button data-act="per-" aria-label="Fewer per day">−</button><button data-act="per+" aria-label="More per day">+</button></div></div>' +
+      '<div class="row sep" style="min-height:52px"><span>From</span><div class="time"><button data-act="start-" aria-label="Earlier start">−</button><span>' + pad(S.start) + ':00</span><button data-act="start+" aria-label="Later start">+</button></div></div>' +
+      '<div class="row sep" style="min-height:52px"><span>Until</span><div class="time"><button data-act="end-" aria-label="Earlier end">−</button><span>' + pad(S.end) + ':00</span><button data-act="end+" aria-label="Later end">+</button></div></div>' +
+      '<div class="row sep" style="min-height:40px;color:#8E8E93;font-size:15px">Your reminder times</div>' +
+      '<div class="times">' + S.times.map(function (t) { return '<span>' + t + '</span>'; }).join('') + '</div>' +
+      '<button class="link sep" data-act="retime">New random times</button>' +
+      sw('favOnly', 'Favorites only', ' sep') +
+      '<button class="link sep" data-act="copy">Copy quotes for Shortcuts (' + lines + ')</button>' +
+      '<button class="link sep" data-act="howto">How to set up reminders</button>' +
+    '</div><p class="foot">iPhone web apps can\'t schedule their own notifications, so reminders run through Apple\'s Shortcuts app. Text quotes only.</p>' +
+
+    '<p class="head">Quote text</p><div class="group">' +
+      '<div style="position:relative;height:230px;margin:12px 16px;border-radius:12px;overflow:hidden">' +
+        bgHtml({ id: 'sample' }) + '<div class="shade"></div>' +
+        '<div class="qwrap" style="padding:0 24px"><p class="qtext serif" style="font-size:calc(' + textSize(sample) + 'px * var(--qscale))">' + sample + '</p>' +
+        '<p class="qauthor serif">Seneca</p></div></div>' +
+      '<div class="row sep"><span>Size</span><span id="sizeLabel" style="color:#8E8E93">' + Math.round(S.textScale * 100) + ' %</span></div>' +
+      '<div style="display:flex;align-items:center;gap:12px;padding:0 16px 14px"><span style="font-size:13px;color:#8E8E93">A</span>' +
+        '<input id="sizeSlider" type="range" min="0.8" max="1.4" step="0.05" value="' + S.textScale + '" aria-label="Text size">' +
+        '<span style="font-size:22px;color:#8E8E93">A</span></div>' +
+      '<div class="row sep" style="min-height:44px"><span>Color</span></div>' +
+      '<div class="tcolors">' + TEXT_COLORS.map(function (c) {
+        return '<button class="' + (S.textColor === c[1] ? 'on' : '') + '" data-tcolor="' + c[1] + '" aria-label="' + c[0] + '"><span style="background:' + c[1] + '"></span></button>';
+      }).join('') + '</div>' +
+      '<label class="row sep" style="cursor:pointer"><span>Custom color</span><input id="customColor" type="color" value="' + String(S.textColor).toLowerCase() + '"></label>' +
+      '<button class="link sep" data-act="resetText">Reset text style</button>' +
+    '</div><p class="foot">Applies to text quotes and to images you save. Photo quotes keep their own text.</p>' +
+
+    '<p class="head">Background</p><div class="group"><div class="swatches">' +
+      PRESETS.map(function (p, i) {
+        return '<button class="' + (!S.vary && !useWallpaper() && S.preset === i ? 'on' : '') + '" data-preset="' + i + '" style="background-image:' + grad(p) + '" aria-label="' + p.name + ' background">' + p.name + '</button>';
+      }).join('') + '</div>' +
+      '<button class="link sep" data-act="bgPhoto">' + (IMG.wallpaper ? 'Choose a different photo' : 'Choose your own photo') + '</button>' +
+      (IMG.wallpaper ? sw('useCustomBg', 'Use my photo', ' sep') : '') +
+      sw('vary', 'Different gradient for each quote', ' sep') +
+    '</div><p class="foot">Used behind text quotes. Tap share on any quote to save it as a Lock Screen wallpaper.</p>' +
+
+    '<p class="head">Library</p><div class="group">' +
+      '<div class="row"><span>Quotes</span><span style="color:#8E8E93">' + (Q.length - photos) + '</span></div>' +
+      '<div class="row sep"><span>Photo quotes</span><span style="color:#8E8E93">' + photos + '</span></div>' +
+      '<button class="link sep" data-act="restore">Restore starter quotes</button>' +
+      '<button class="link sep" data-act="export">Back up quotes and photos</button>' +
+      '<button class="link sep" data-act="import">Restore from backup</button>' +
+    '</div><p class="foot" style="margin-bottom:40px">Everything is stored only on this iPhone. Removing the app from your Home Screen deletes it, so make a backup now and then.</p>';
+  $('settings').scrollTop = keep;
+}
+$('settings').addEventListener('input', function (e) {
+  if (e.target.id === 'sizeSlider') {
+    S.textScale = +e.target.value; applyTextStyle(); saveS();
+    $('sizeLabel').textContent = Math.round(S.textScale * 100) + ' %';
+  }
+  if (e.target.id === 'customColor') {
+    S.textColor = e.target.value.toUpperCase(); applyTextStyle(); saveS();
+    document.querySelectorAll('.tcolors button').forEach(function (b) { b.classList.toggle('on', b.dataset.tcolor === S.textColor); });
+  }
+});
+$('settings').addEventListener('click', function (e) {
+  var t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.sw) {
+    var k = t.dataset.sw; S[k] = !S[k]; saveS();
+    if (k === 'vary' && S.vary) S.useCustomBg = false;
+    if (k === 'useCustomBg' && S.useCustomBg) S.vary = false;
+    saveS(); renderSettings(); if (k !== 'favOnly') { renderFeed(); renderRows(); }
+    return;
+  }
+  if (t.dataset.tcolor) { S.textColor = t.dataset.tcolor; saveS(); applyTextStyle(); renderSettings(); return; }
+  if (t.dataset.preset) { S.preset = +t.dataset.preset; S.vary = false; S.useCustomBg = false; saveS(); refresh(); return; }
+  var a = t.dataset.act, changed = true;
+  if (a === 'per-' && S.perDay > 1) S.perDay--;
+  else if (a === 'per+' && S.perDay < 30) S.perDay++;
+  else if (a === 'start-' && S.start > 0) S.start--;
+  else if (a === 'start+' && S.start < S.end - 1) S.start++;
+  else if (a === 'end-' && S.end > S.start + 1) S.end--;
+  else if (a === 'end+' && S.end < 24) S.end++;
+  else if (a === 'retime') {}
+  else changed = false;
+  if (changed) { S.times = genTimes(S.perDay, S.start, S.end); saveS(); renderSettings(); return; }
+  if (a === 'resetText') { S.textScale = 1; S.textColor = '#FFFFFF'; saveS(); applyTextStyle(); renderSettings(); }
+  if (a === 'copy') copyQuotes();
+  if (a === 'howto') showHowTo();
+  if (a === 'bgPhoto') $('bgFile').click();
+  if (a === 'restore') {
+    var have = {}; Q.forEach(function (q) { have[q.text] = true; });
+    var missing = starterQuotes().filter(function (q) { return !have[q.text]; });
+    if (!missing.length) { toast('All starter quotes are already here.'); return; }
+    missing.forEach(function (q) { q.created = Date.now(); Q.push(q); });
+    saveQ(); syncOrder(); refresh(); toast('Restored ' + missing.length + ' quotes.');
+  }
+  if (a === 'export') exportBackup();
+  if (a === 'import') $('importFile').click();
+});
+$('bgFile').addEventListener('change', function (e) {
+  var f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  downscale(f, 2000).then(function (blob) { return putImg('wallpaper', blob); }).then(function () {
+    S.useCustomBg = true; S.vary = false; saveS(); refresh(); toast('Background updated.');
+  }).catch(function () { toast('That photo could not be read.'); });
+});
+
+/* ================= Reminders via Shortcuts ================= */
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+  return new Promise(function (res, rej) {
+    var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy') ? res() : rej(); } catch (e) { rej(e); } ta.remove();
+  });
+}
+function copyQuotes() {
+  var lines = quoteLinesForShortcuts();
+  if (!lines.length) { toast('Add some text quotes first.'); return; }
+  copyText(lines.join('\n')).then(function () { toast('Copied ' + lines.length + ' quotes. Paste them into your shortcut.'); },
+    function () { toast('Could not copy. Try again.'); });
+}
+function showHowTo() {
+  openInfo('Set up reminders',
+    '<p class="foot" style="margin-top:4px">One-time setup, about 10 minutes. After that, your iPhone shows a random quote at each of your times.</p>' +
+    '<button class="bigbtn" id="howCopy">Copy my quotes first</button>' +
+    '<p class="head">Make the shortcut</p><ol class="steps">' +
+      '<li>Open the <b>Shortcuts</b> app, go to the <b>Shortcuts</b> tab and tap <b>+</b>. Name it <b>Mantra</b>.</li>' +
+      '<li>Add the action <b>Text</b> and paste your quotes into it.</li>' +
+      '<li>Add <b>Split Text</b> and set it to split by <b>New Lines</b>.</li>' +
+      '<li>Add <b>Get Item from List</b> and set it to <b>Random Item</b>.</li>' +
+      '<li>Add <b>Show Notification</b>. Put <b>Item from List</b> in the message, and type <b>Mantra</b> as the title.</li>' +
+    '</ol><p class="head">Run it at your times</p><ol class="steps" style="counter-reset:s 5">' +
+      '<li>Go to the <b>Automation</b> tab, tap <b>+</b> and choose <b>Time of Day</b>.</li>' +
+      '<li>Set the first time from your list (' + esc(S.times[0] || '08:30') + '), repeat <b>Daily</b>, and choose <b>Run Immediately</b>. Turn off <b>Notify When Run</b>.</li>' +
+      '<li>Tap Next and pick your <b>Mantra</b> shortcut.</li>' +
+      '<li>Repeat for each time: ' + esc(S.times.join(', ')) + '.</li>' +
+    '</ol><p class="foot" style="margin-top:14px">When you add or edit quotes, copy them again and replace the text in step 2. Shortcuts\' menus can differ slightly between iOS versions.</p>');
+  $('howCopy').onclick = copyQuotes;
+}
+
+/* ================= Backup ================= */
+function blobToDataURL(b) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(b); }); }
+function exportBackup() {
+  toast('Preparing backup…');
+  var keys = Q.filter(function (q) { return q.img; }).map(function (q) { return q.img; });
+  if (IMG.wallpaper) keys.push('wallpaper');
+  var images = {};
+  Promise.all(keys.map(function (k) {
+    return getImg(k).then(function (b) { return b ? blobToDataURL(b).then(function (d) { images[k] = d; }) : null; });
+  })).then(function () {
+    var data = JSON.stringify({ app: 'mantra', version: 1, exported: new Date().toISOString(), quotes: Q, settings: S, images: images });
+    var name = 'mantra-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    var f = new File([data], name, { type: 'application/json' });
+    shareFile(f, fallbackFor('', false));
+  }).catch(function () { toast('Backup failed.'); });
+}
+$('importFile').addEventListener('change', function (e) {
+  var f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  f.text().then(function (txt) {
+    var d = JSON.parse(txt);
+    if (!d || d.app !== 'mantra' || !Array.isArray(d.quotes)) throw new Error('bad');
+    if (!confirm('Replace everything in Mantra with this backup (' + d.quotes.length + ' quotes)?')) return;
+    var imgs = d.images || {};
+    return Promise.all(Object.keys(imgs).map(function (k) {
+      return fetch(imgs[k]).then(function (r) { return r.blob(); }).then(function (b) { return putImg(k, b); });
+    })).then(function () {
+      Q = d.quotes; S = Object.assign({}, DEFAULTS, d.settings || {});
+      if (!Array.isArray(S.times) || !S.times.length) S.times = genTimes(S.perDay, S.start, S.end);
+      saveQ(); saveS(); UI.order = shuffle(Q.map(function (q) { return q.id; }));
+      applyTextStyle(); refresh(); toast('Backup restored.');
+    });
+  }).catch(function () { toast('That file is not a Mantra backup.'); });
+});
+
+/* ================= Tabs, install hint, start ================= */
+function setTab(t) {
+  UI.tab = t;
+  ['feed', 'quotes', 'settings'].forEach(function (n) { $(n).classList.toggle('hidden', n !== t); });
+  $('shuffleBtn').classList.toggle('hidden', t !== 'feed' || !Q.length);
+  updateInstallHint();
+  document.querySelectorAll('.tabbar button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === t); });
+}
+document.querySelectorAll('.tabbar button').forEach(function (b) { b.onclick = function () { setTab(b.dataset.tab); }; });
+
+var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+var standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+function updateInstallHint() {
+  $('installHint').classList.toggle('hidden', !(isIOS && !standalone && !S.installHintDismissed && UI.tab === 'feed'));
+}
+$('installClose').onclick = function () { S.installHintDismissed = true; saveS(); updateInstallHint(); };
+
+function refresh() { renderFeed(); renderRows(); renderSettings(); setTab(UI.tab); }
+
+function fit() {
+  var p = $('phone');
+  if (window.innerWidth <= 600) { p.style.transform = ''; return; }
+  p.style.transform = 'scale(' + Math.min(1, (window.innerHeight - 40) / 844) + ')';
+}
+window.addEventListener('resize', fit);
+
+UI.order = shuffle(Q.map(function (q) { return q.id; }));
+applyTextStyle(); fit(); renderSeg();
+refresh();
+loadAllImages().then(refresh);
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(function () {});
+</script>
+</body>
+</html>
