@@ -247,7 +247,7 @@
 
   <input type="file" id="photoFile" accept="image/*" multiple class="hidden">
   <input type="file" id="bgFile" accept="image/*" class="hidden">
-  <input type="file" id="importFile" accept="application/json,.json" class="hidden">
+  <input type="file" id="importFile" accept=".csv,text/csv,text/comma-separated-values,.json,application/json,text/plain" class="hidden">
 </div>
 
 <script>
@@ -604,8 +604,13 @@ function fallbackFor(url, isImage) {
 document.addEventListener('click', function (e) {
   if (e.target && e.target.id === 'shareAgain' && pendingFile) {
     var f = pendingFile;
-    if (navigator.canShare && navigator.canShare({ files: [f] })) navigator.share({ files: [f] }).catch(function () {});
-    else { var a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); }
+    var isBackup = /\.csv$/.test(f.name);
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f] }).then(function () { if (isBackup) { closeInfo(); markBackedUp(); } }).catch(function () {});
+    } else {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+      if (isBackup) { closeInfo(); markBackedUp(); }
+    }
   }
 });
 function shareQuote(q) {
@@ -729,9 +734,13 @@ function renderSettings() {
       '<div class="row"><span>Quotes</span><span style="color:var(--text2)">' + (Q.length - photos) + '</span></div>' +
       '<div class="row sep"><span>Photo quotes</span><span style="color:var(--text2)">' + photos + '</span></div>' +
       '<button class="link sep" data-act="restore">Restore starter quotes</button>' +
-      '<button class="link sep" data-act="export">Back up quotes and photos</button>' +
-      '<button class="link sep" data-act="import">Restore from backup</button>' +
-    '</div><p class="foot" style="margin-bottom:40px">Everything is stored only on this iPhone. Removing the app from your Home Screen deletes it, so make a backup now and then.</p>';
+    '</div>' +
+
+    '<p class="head">Backup</p><div class="group">' +
+      '<button class="link" data-act="export"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Save backup to Files</button>' +
+      '<button class="link sep" data-act="import"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0A84FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21V9"/><path d="m7 14 5-5 5 5"/><path d="M5 3h14"/></svg>Restore from backup</button>' +
+    '</div><p class="foot">' + backupSummary() + ' The backup is one CSV file with all your quotes, photo quotes, favorites, background and settings.</p>' +
+    '<p class="foot" style="margin-bottom:40px">Everything else is stored only on this iPhone. Removing the app from your Home Screen deletes it, so save a backup now and then.</p>';
   $('settings').scrollTop = keep;
 }
 $('settings').addEventListener('input', function (e) {
@@ -776,7 +785,7 @@ $('settings').addEventListener('click', function (e) {
     missing.forEach(function (q) { q.created = Date.now(); Q.push(q); });
     saveQ(); syncOrder(); refresh(); toast('Restored ' + missing.length + ' quotes.');
   }
-  if (a === 'export') exportBackup();
+  if (a === 'export') exportCSV();
   if (a === 'import') $('importFile').click();
 });
 $('bgFile').addEventListener('change', function (e) {
@@ -821,40 +830,205 @@ function showHowTo() {
   $('howCopy').onclick = copyQuotes;
 }
 
-/* ================= Backup ================= */
+/* ================= Backup (CSV) ================= */
+// One CSV file holds everything: text quotes, photo quotes (image stored inside the file),
+// favourites, your own background photo and your settings. Columns:
+// type, text, author, favorite, created, image, settings
+var CSV_HEADER = ['type', 'text', 'author', 'favorite', 'created', 'image', 'settings'];
+
 function blobToDataURL(b) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(b); }); }
-function exportBackup() {
-  toast('Preparing backup…');
-  var keys = Q.filter(function (q) { return q.img; }).map(function (q) { return q.img; });
-  if (IMG.wallpaper) keys.push('wallpaper');
-  var images = {};
-  Promise.all(keys.map(function (k) {
-    return getImg(k).then(function (b) { return b ? blobToDataURL(b).then(function (d) { images[k] = d; }) : null; });
-  })).then(function () {
-    var data = JSON.stringify({ app: 'mantra', version: 1, exported: new Date().toISOString(), quotes: Q, settings: S, images: images });
-    var name = 'mantra-backup-' + new Date().toISOString().slice(0, 10) + '.json';
-    var f = new File([data], name, { type: 'application/json' });
-    shareFile(f, fallbackFor('', false));
-  }).catch(function () { toast('Backup failed.'); });
+function dataURLToBlob(d) { return fetch(d).then(function (r) { return r.blob(); }); }
+function csvCell(v) { v = v == null ? '' : String(v); return /[",;\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function toCSV(rows) { return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n'); }
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  var firstLine = text.split('\n')[0];
+  var delim = (firstLine.indexOf(';') >= 0 && firstLine.indexOf(',') < 0) ? ';' : ',';
+  var rows = [], row = [], f = '', q = false, i = 0, c;
+  while (i < text.length) {
+    c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { f += '"'; i += 2; continue; } q = false; i++; continue; }
+      f += c; i++; continue;
+    }
+    if (c === '"') { q = true; i++; continue; }
+    if (c === delim) { row.push(f); f = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(f); rows.push(row); row = []; f = ''; i++; continue; }
+    f += c; i++;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(function (r) { return r.some(function (x) { return x.trim() !== ''; }); });
 }
+function fmtDate(ms) { return new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function backupSummary() {
+  if (!S.lastBackup) return 'No backup yet.';
+  var days = Math.floor((Date.now() - S.lastBackup) / 86400000);
+  return 'Last backup: ' + fmtDate(S.lastBackup) + (days === 0 ? ' (today)' : days === 1 ? ' (yesterday)' : ' (' + days + ' days ago)') + '.';
+}
+function markBackedUp() { S.lastBackup = Date.now(); saveS(); if (UI.tab === 'settings') renderSettings(); toast('Backup saved.'); }
+
+function exportCSV() {
+  toast('Preparing backup…');
+  var rows = [CSV_HEADER];
+  Promise.all(Q.map(function (q) {
+    var created = new Date(+q.created || 0).toISOString();
+    var base = [q.img ? 'photo' : 'quote', q.text || '', q.author || '', q.fav ? 'yes' : 'no', created];
+    if (!q.img) return Promise.resolve(base.concat(['', '']));
+    return getImg(q.img).then(function (b) { return b ? blobToDataURL(b) : ''; })
+      .then(function (d) { return base.concat([d, '']); });
+  })).then(function (quoteRows) {
+    rows = rows.concat(quoteRows.filter(function (r) { return r[0] === 'quote' || r[5]; }));
+    return IMG.wallpaper ? getImg('wallpaper').then(function (b) { return b ? blobToDataURL(b) : ''; }) : '';
+  }).then(function (wall) {
+    if (wall) rows.push(['wallpaper', '', '', '', '', wall, '']);
+    var keep = Object.assign({}, S); delete keep.lastBackup; delete keep.installHintDismissed;
+    rows.push(['settings', '', '', '', '', '', JSON.stringify(keep)]);
+    var name = 'Mantra backup ' + new Date().toISOString().slice(0, 10) + '.csv';
+    var file = new File(['﻿' + toCSV(rows)], name, { type: 'text/csv' });
+    saveBackupFile(file);
+  }).catch(function () { toast('Backup failed. Please try again.'); });
+}
+function saveBackupFile(file) {
+  pendingFile = file;
+  var ready = '<p class="foot" style="margin-top:4px">Your backup <b style="color:var(--text)">' + esc(file.name) + '</b> is ready (' +
+    Math.max(1, Math.round(file.size / 1024)) + ' KB).</p>' +
+    '<button class="bigbtn" id="shareAgain">Save backup</button>' +
+    '<p class="foot">In the menu that opens, choose <b style="color:var(--text)">Save to Files</b>, pick a folder (for example iCloud Drive) and tap Save.</p>';
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    navigator.share({ files: [file] }).then(markBackedUp).catch(function (err) {
+      if (err && err.name === 'AbortError') return;
+      openInfo('Backup ready', ready);
+    });
+  } else {
+    openInfo('Backup ready', ready);
+  }
+}
+
+/* ----- Reading a backup ----- */
+function readBackup(file) {
+  return file.text().then(function (txt) {
+    var t = txt.replace(/^﻿/, '').trim();
+    if (t.charAt(0) === '{') return fromJSONBackup(JSON.parse(t));
+    return fromCSVBackup(parseCSV(t));
+  });
+}
+function yes(v) { return /^(yes|y|true|1|x|ja|♥)$/i.test(String(v || '').trim()); }
+function fromCSVBackup(rows) {
+  if (!rows.length) throw new Error('empty');
+  var head = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+  var col = function (n) { return head.indexOf(n); };
+  var iType = col('type'), iText = col('text'), iAuthor = col('author'), iFav = col('favorite'),
+      iCreated = col('created'), iImage = col('image'), iSettings = col('settings');
+  var body = rows.slice(1);
+  if (iText < 0) {
+    // A plain list without a header: first column = quote, second = author.
+    iText = 0; iAuthor = 1; body = rows; iType = iFav = iCreated = iImage = iSettings = -1;
+  }
+  var out = { quotes: [], wallpaper: null, settings: null };
+  body.forEach(function (r, n) {
+    var get = function (i) { return i >= 0 && i < r.length ? r[i] : ''; };
+    var type = (get(iType) || '').trim().toLowerCase();
+    if (type === 'settings') { try { out.settings = JSON.parse(get(iSettings)); } catch (e) {} return; }
+    if (type === 'wallpaper') { if (/^data:image\//.test(get(iImage))) out.wallpaper = get(iImage); return; }
+    var image = /^data:image\//.test(get(iImage)) ? get(iImage) : null;
+    var text = get(iText).trim();
+    if (!text && !image) return;
+    var created = Date.parse(get(iCreated));
+    out.quotes.push({ text: text, author: get(iAuthor).trim(), fav: yes(get(iFav)), created: isNaN(created) ? n : created, image: image });
+  });
+  if (!out.quotes.length && !out.settings) throw new Error('nothing');
+  return out;
+}
+function fromJSONBackup(d) {
+  if (!d || d.app !== 'mantra' || !Array.isArray(d.quotes)) throw new Error('bad');
+  var imgs = d.images || {};
+  return {
+    quotes: d.quotes.map(function (q, n) {
+      return { text: q.text || '', author: q.author || '', fav: !!q.fav, created: q.created || n, image: q.img ? imgs[q.img] || null : null };
+    }).filter(function (q) { return q.text || q.image; }),
+    wallpaper: imgs.wallpaper || null,
+    settings: d.settings || null
+  };
+}
+
+/* ----- Restoring ----- */
+var pendingBackup = null;
 $('importFile').addEventListener('change', function (e) {
   var f = e.target.files && e.target.files[0]; e.target.value = '';
   if (!f) return;
-  f.text().then(function (txt) {
-    var d = JSON.parse(txt);
-    if (!d || d.app !== 'mantra' || !Array.isArray(d.quotes)) throw new Error('bad');
-    if (!confirm('Replace everything in Mantra with this backup (' + d.quotes.length + ' quotes)?')) return;
-    var imgs = d.images || {};
-    return Promise.all(Object.keys(imgs).map(function (k) {
-      return fetch(imgs[k]).then(function (r) { return r.blob(); }).then(function (b) { return putImg(k, b); });
-    })).then(function () {
-      Q = d.quotes; S = Object.assign({}, DEFAULTS, d.settings || {});
-      if (!Array.isArray(S.times) || !S.times.length) S.times = genTimes(S.perDay, S.start, S.end);
-      saveQ(); saveS(); UI.order = shuffle(Q.map(function (q) { return q.id; }));
-      applyTextStyle(); refresh(); toast('Backup restored.');
-    });
+  readBackup(f).then(function (d) {
+    pendingBackup = d;
+    var photos = d.quotes.filter(function (q) { return q.image; }).length, texts = d.quotes.length - photos;
+    openInfo('Restore backup',
+      '<p class="foot" style="margin-top:4px;font-size:15px;line-height:21px;color:var(--text)">' + esc(f.name) + '</p>' +
+      '<p class="foot">Contains ' + texts + ' quote' + (texts === 1 ? '' : 's') + ' and ' + photos + ' photo quote' + (photos === 1 ? '' : 's') +
+        (d.wallpaper ? ', your background photo' : '') + (d.settings ? ' and your settings' : '') + '.</p>' +
+      '<button class="bigbtn" id="restoreReplace">Replace everything</button>' +
+      '<p class="foot" style="margin-top:-6px">Your current quotes are swapped for the ones in this backup.</p>' +
+      '<button class="bigbtn" id="restoreMerge" style="background:var(--ctrl)">Add to my quotes</button>' +
+      '<p class="foot" style="margin-top:-6px">Keeps what you have and adds anything missing. Quotes you already have are skipped.</p>');
   }).catch(function () { toast('That file is not a Mantra backup.'); });
 });
+document.addEventListener('click', function (e) {
+  if (!e.target || !pendingBackup) return;
+  if (e.target.id === 'restoreReplace') applyBackup(pendingBackup, 'replace');
+  if (e.target.id === 'restoreMerge') applyBackup(pendingBackup, 'merge');
+});
+function applyBackup(d, mode) {
+  pendingBackup = null; closeInfo(); toast('Restoring…');
+  var replace = mode === 'replace';
+  var newQ = replace ? [] : Q.slice();
+  var oldImgKeys = Q.filter(function (q) { return q.img; }).map(function (q) { return q.img; });
+  var haveText = {}, havePhoto = {};
+  var sig = function (caption, size) { return (caption || '') + '|' + size; };
+  var prep = Promise.resolve();
+  if (!replace) {
+    Q.forEach(function (q) { if (!q.img) haveText[(q.text || '') + '\u0000' + (q.author || '')] = true; });
+    prep = Promise.all(Q.filter(function (q) { return q.img; }).map(function (q) {
+      return getImg(q.img).then(function (b) { if (b) havePhoto[sig(q.text, b.size)] = true; });
+    }));
+  }
+  var added = 0, skipped = 0;
+  prep.then(function () {
+    return d.quotes.reduce(function (p, item) {
+      return p.then(function () {
+        if (!item.image) {
+          var k = item.text + '\u0000' + item.author;
+          if (haveText[k]) { skipped++; return; }
+          haveText[k] = true;
+          newQ.push({ id: uid(), text: item.text, author: item.author, fav: item.fav, created: item.created });
+          added++; return;
+        }
+        return dataURLToBlob(item.image).then(function (blob) {
+          var s = sig(item.text, blob.size);
+          if (havePhoto[s]) { skipped++; return; }
+          havePhoto[s] = true;
+          var key = 'img-' + uid();
+          return putImg(key, blob).then(function () {
+            newQ.push({ id: uid(), text: item.text, author: item.author, fav: item.fav, created: item.created, img: key });
+            added++;
+          });
+        }).catch(function () { skipped++; });
+      });
+    }, Promise.resolve());
+  }).then(function () {
+    if (d.wallpaper && (replace || !IMG.wallpaper)) return dataURLToBlob(d.wallpaper).then(function (b) { return putImg('wallpaper', b); }).catch(function () {});
+  }).then(function () {
+    if (replace) {
+      oldImgKeys.forEach(function (k) { delImg(k); });
+      if (d.settings) {
+        S = Object.assign({}, DEFAULTS, d.settings, { lastBackup: S.lastBackup, installHintDismissed: S.installHintDismissed, darkLook: true });
+        if (!Array.isArray(S.times) || !S.times.length) S.times = genTimes(S.perDay, S.start, S.end);
+        if (S.useCustomBg && !IMG.wallpaper) S.useCustomBg = false;
+      }
+    }
+    Q = newQ; saveQ(); saveS();
+    UI.order = shuffle(Q.map(function (q) { return q.id; }));
+    applyTextStyle(); renderShowSeg(); refresh();
+    toast(replace ? 'Backup restored: ' + added + ' quotes.' : 'Added ' + added + ' quotes' + (skipped ? ', skipped ' + skipped + ' you already had.' : '.'));
+  }).catch(function () { toast('Restore failed. Your quotes were not changed.'); });
+}
 
 /* ================= Tabs, install hint, start ================= */
 function setTab(t) {
